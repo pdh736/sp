@@ -23,6 +23,7 @@ bool NameCmpDesc(FINDFILE f1, FINDFILE f2)
 		return false;
 }
 
+
 void ScanDir(char path[], FINDFILE *list)
 {
 	_finddata_t fd;
