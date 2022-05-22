@@ -14,8 +14,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-// #include <microhttpd.h>
-
 #include "tct_library.h"
 
 void tct_string_token(GPtrArray *str_list, char *original_str, char *delimeter) {
@@ -37,7 +35,6 @@ void tct_string_token(GPtrArray *str_list, char *original_str, char *delimeter) 
     }
     free(copy);
 }
-
 
 //=====time======================================
 char* get_cur_date(char delimeter) {
@@ -675,26 +672,96 @@ void tct_parse_json_example(char* json_str) {
     json_object_object_get_ex(root, "name", &name);
     json_object_object_get_ex(root, "phone", &phone);
     printf("name: %s, phone: %s\n", json_object_get_string(name), json_object_get_string(phone));
+
+    json_object_put(root);
+}
+//================================================
+
+
+//=====http common================================
+TCT_HTTP_HEADER* tct_http_header_new(void) {
+    TCT_HTTP_HEADER* header = (TCT_HTTP_HEADER*)malloc(sizeof(TCT_HTTP_HEADER));
+    return header;
+}
+void tct_http_header_init(TCT_HTTP_HEADER* header) {
+    if (header) {
+        header->name = NULL;
+        header->value = NULL;
+    }
+}
+void tct_http_header_free(void* param) {
+    TCT_HTTP_HEADER* header = (TCT_HTTP_HEADER*)param;
+    if (header) {
+        if (header->name)
+            free(header->name);
+        header->name = NULL;
+
+        if (header->value)
+            free(header->value);
+        header->value = NULL;
+    }
+}
+
+int tct_http_header_set_name(TCT_HTTP_HEADER* header, char* name) {
+    if (!header || !name)
+        return -1;
+
+    int name_len = strlen(name);
+    
+    header->name = (char*)malloc(name_len+1);
+    memset(header->name, 0x00, name_len+1);
+    strncpy(header->name, name, name_len);
+
+    return name_len;
+}
+int tct_http_header_set_value(TCT_HTTP_HEADER* header, char* value) {
+    if (!header || !value)
+        return -1;
+
+    int val_len = strlen(value);
+    
+    header->value = (char*)malloc(val_len+1);
+    memset(header->value, 0x00, val_len+1);
+    strncpy(header->value, value, val_len);
+
+    return val_len;
+}
+
+
+TCT_HTTP_DATA* tct_http_data_new(void) {
+    TCT_HTTP_DATA* data = (TCT_HTTP_DATA*)malloc(sizeof(TCT_HTTP_DATA));
+    return data;
+}
+
+void tct_http_data_init(TCT_HTTP_DATA* data) {
+    if (data) {
+        data->headers = tct_ptr_ary_new();
+        tct_ptr_ary_set_free_func(data->headers, tct_http_header_free);
+        data->body = NULL;
+        data->body_size = 0;
+    }
+}
+void tct_http_data_clear(TCT_HTTP_DATA* data) {
+    if (data) {
+        tct_ptr_ary_free(data->headers);
+        data->headers = NULL;
+
+        if(data->body)
+            free(data->body);
+        data->body= NULL;
+        data->body_size = 0;
+    }
+}
+void tct_http_data_free(TCT_HTTP_DATA* data) {
+    if (data) {
+        tct_http_data_clear(data);
+        free(data);
+    }
 }
 //================================================
 
 
 //=====http client(curl)==========================
-void tct_http_data_init(TCT_HTTP_DATA* data) {
-    data->headers = tct_ptr_ary_new2();
-    data->body = NULL;
-    data->body_size = 0;
-}
-void tct_http_data_clear(TCT_HTTP_DATA* data) {
-    tct_ptr_ary_free(data->headers);
-    data->headers = NULL;
-
-    if(data->body)
-        free(data->body);
-    data->body= NULL;
-    data->body_size = 0;
-}
-
 size_t tct_curl_cb(void *data, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
 
@@ -722,15 +789,19 @@ size_t tct_curl_header_cb(void *data, size_t size, size_t nitems, void *userp) {
     if (len == 2) {
         return len;
         //0 리턴시 curl_easy_getinfo 에서 에러로 판단
-
     }
 
     GPtrArray* ptr_ary = (GPtrArray*)userp;
+    TCT_HTTP_HEADER* header = tct_http_header_new();
+    tct_http_header_init(header);
+    
+    char name[128] = {0,};
+    char value[265] = {0,};
 
-    char* header = (char*)malloc(sizeof(char)*len+1);
-    memset(header, 0x00, len+1);
-
-    strncpy(header, (char*)data, len);
+    sscanf(data, "%[^: ]:%[^\r/n]", name, value);
+    
+    tct_http_header_set_name(header, name);
+    tct_http_header_set_value(header, value);
 
     tct_ptr_ary_add(ptr_ary, header);
 
@@ -744,8 +815,6 @@ struct curl_slist* tct_curl_set_header(CURL* curl, GPtrArray* ptr_ary) {
     for (int i = 0; i < tct_ptr_ary_len(ptr_ary); i++) {
         header = curl_slist_append( header, tct_ptr_ary_index(ptr_ary, i));
     }
-    //header = curl_slist_append( header , "User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; .NET CLR 1.0.3705) " ) ;
-    //header = curl_slist_append( header , "Content-Type: application/x-www-form-urlencoded" ) ;
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER , header) ;
     return header;
 }
@@ -847,22 +916,27 @@ void tct_curl_example(void) {
     char* url = "http://127.0.0.1:8080/helloworld";
     //get
     printf("request get\n");
+
+  
     TCT_HTTP_DATA req;
     TCT_HTTP_DATA res;
     tct_http_data_init(&req);
     tct_http_data_init(&res);
 
-    char* user = (char*)malloc(128);
-    memset(user, 0x00, 128);
-    strcpy(user, "User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; .NET CLR 1.0.3705)");
+    TCT_HTTP_HEADER* user = tct_http_header_new();
+    tct_http_header_init(user);
+    tct_http_header_set_name(user, "User-Agent");
+    tct_http_header_set_value(user, "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; .NET CLR 1.0.3705)");
     tct_ptr_ary_add(req.headers, user);
 
-    char* con_type = (char*)malloc(64);
-    memset(con_type, 0x00, 64);
-    strcpy(con_type, "Content-Type: application/x-www-form-urlencoded");
+    TCT_HTTP_HEADER* con_type = tct_http_header_new();
+    tct_http_header_init(con_type);
+    tct_http_header_set_name(user, "Content-Type");
+    tct_http_header_set_value(user, "application/x-www-form-urlencoded");
     tct_ptr_ary_add(req.headers, con_type);
 
     status = tct_curl_http_get(url, &req, &res);
+    printf("http status : %d\n", status);
 
     printf("header size : %d\n", tct_ptr_ary_len(res.headers));
     printf("[body] : %s\n", res.body);
@@ -882,6 +956,7 @@ void tct_curl_example(void) {
 
     status = tct_curl_http_post(url, &req, &res);
 
+    printf("http status : %d\n", status);
     printf("header size : %d\n", tct_ptr_ary_len(res.headers));
     printf("[body] : %s\n", res.body);
 
@@ -891,3 +966,284 @@ void tct_curl_example(void) {
 }
 //================================================
 
+
+
+//=====http server================================
+TCT_MHD_DATA* tct_mhd_data_new(void) {
+    TCT_MHD_DATA* data = (TCT_MHD_DATA*)malloc(sizeof(TCT_MHD_DATA));
+    return data;
+}
+
+void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post) {
+    data->process_get = process_get;
+    data->process_post = process_post;
+    data->check_header_list = tct_ptr_ary_new2();
+}
+
+void tct_mhd_data_free(TCT_MHD_DATA* data) {
+    if(data) {
+        tct_ptr_ary_free(data->check_header_list);
+        data->check_header_list = NULL;
+        free(data);
+    }
+}
+
+void tct_connection_info_init(TCT_CONNECTION_INFO* info) {
+    info->req = tct_http_data_new();
+    tct_http_data_init(info->req);
+    info->res = tct_http_data_new();
+    tct_http_data_init(info->res);
+    memset(info->url, 0x00, sizeof(info->url));
+}
+
+void tct_connection_info_clear(TCT_CONNECTION_INFO* info) {
+    if (info) {
+        if (info->req) {
+            tct_http_data_clear(info->req);
+            free(info->req);
+        }
+
+        if (info->res) {
+            tct_http_data_clear(info->res);
+            free(info->res);
+        }
+    }
+}
+
+void tct_connection_info_free(TCT_CONNECTION_INFO* info) {
+    if (info) {
+        tct_connection_info_clear(info);
+        free(info);
+    }
+}
+
+
+//about request
+int tct_mhd_get_http_header(struct MHD_Connection* connection, TCT_HTTP_DATA* data, GPtrArray* check_list) {
+    int ary_len = tct_ptr_ary_len(check_list);
+    for (int i = 0; i < ary_len; i++) {
+        char* header_name = tct_ptr_ary_index(check_list, i);
+        const char* header_val = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, header_name);
+        if (header_val) {
+            TCT_HTTP_HEADER* header = tct_http_header_new();
+            tct_http_header_set_name(header, header_name);
+            tct_http_header_set_value(header, header_val);
+
+            //printf("[header] %s:%s\n", header->name, header->value);
+
+            tct_ptr_ary_add(data->headers, header);
+        }
+
+    }
+    return tct_ptr_ary_len(data->headers);
+}
+
+size_t tct_mhd_get_req_body(TCT_CONNECTION_INFO *con_info, const char* upload_data, size_t upload_data_size) {
+    TCT_HTTP_DATA* req = con_info->req;
+
+    char *ptr = realloc(req->body, req->body_size + upload_data_size + 1);
+    if (ptr == NULL)
+        return 0; //out of memory!
+
+    req->body = ptr;
+    memcpy(&(req->body[req->body_size]), upload_data, upload_data_size);
+    req->body_size += (upload_data_size + 1);
+    req->body[req->body_size] = 0;
+
+    return upload_data_size;
+}
+
+
+//about response
+int tct_mhd_make_body(TCT_HTTP_DATA* data, json_object* json) {
+    const char* json_str = json_object_to_json_string_ext(json, JSON_C_TO_STRING_PLAIN);
+    int len = strlen(json_str);
+
+    if (data->body)
+        free(data->body);
+
+    data->body_size = len+1;
+    data->body = (char*)malloc(data->body_size);
+    memset(data->body, 0x00, data->body_size);
+    strncpy(data->body, json_str, len);
+
+    return len;
+}
+
+//입력된 Status Code로 응답 수행
+enum MHD_Result tct_mhd_response(struct MHD_Connection *connection, TCT_HTTP_DATA *res, int status_code) {
+    enum MHD_Result ret;
+    struct MHD_Response *response = NULL;
+
+    if (res) {
+        if (res->body) {
+            response = MHD_create_response_from_buffer(strlen(res->body), (void*)res->body, MHD_RESPMEM_MUST_COPY);
+
+            int header_len = tct_ptr_ary_len(res->headers);
+            if (header_len > 0) {
+                for(int i = 0 ; i < header_len; i++) {
+                    TCT_HTTP_HEADER* header = tct_ptr_ary_index(res->headers, i);
+                    //printf("set header %s:%s\n", header->name, header->value);
+                    MHD_add_response_header(response, header->name, header->value);
+                }
+            }
+        }
+        else {
+            response = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_MUST_COPY);
+        }
+    }
+    else {
+        response = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_MUST_COPY);
+    }
+
+    if (!response)
+        return MHD_NO;
+
+    ret = MHD_queue_response(connection, status_code, response);
+
+    MHD_destroy_response(response);
+
+    return ret;
+}
+
+//about mhd callback
+//접속을 처리하는 callback
+//return MHD_YES 하면 다시 call됨
+enum MHD_Result tct_mhd_access_handler_cb(void* cls, struct MHD_Connection* connection,
+                                        const char* url, const char* method, const char* version,
+                                        const char* upload_data, size_t* upload_data_size, void** con_cls) {
+    //printf("[start line] Method: %s\n", method);
+    //printf("[start line] Request URI: %s\n", url);
+
+    //int status_code = MHD_HTTP_OK; //200 OK
+    int status_code = 500; // 500 Internel server error
+
+    TCT_CONNECTION_INFO* con_info = (TCT_CONNECTION_INFO*)*con_cls;
+    // 최초 접속의 경우
+    if (con_info == NULL) {
+        con_info = (TCT_CONNECTION_INFO*)calloc(1, sizeof(TCT_CONNECTION_INFO));
+        if (con_info == NULL) {
+            return MHD_NO;
+        }
+
+        tct_connection_info_init(con_info);
+
+        *con_cls = con_info;
+
+        return MHD_YES;
+    }
+
+    TCT_MHD_DATA* data = (TCT_MHD_DATA*)cls;
+    if (data && data->check_header_list && (tct_ptr_ary_len(con_info->req->headers)>0) == 0) {
+        tct_mhd_get_http_header(connection, con_info->req, data->check_header_list);
+    }
+
+    if (strcmp(method, "POST") == 0) {
+        if (*upload_data_size != 0) {
+            tct_mhd_get_req_body(con_info, upload_data, *upload_data_size);
+            *upload_data_size = 0;
+            return MHD_YES;
+        }
+        else {
+            //printf("[body] %s\n", con_info->buffer);
+            if (data && data->process_post)
+                status_code = data->process_post(con_info);
+        }
+    }
+    if (strcmp(method, "GET") == 0) {
+        if (data && data->process_get)
+            status_code = data->process_get(con_info);
+    }
+
+    return tct_mhd_response(connection, con_info->res, status_code);
+}
+
+
+//접속이 완료되는 경우 호출되는 callback
+void tct_mhd_complated(void* cls, struct MHD_Connection* connection,
+                                void** con_cls, enum MHD_RequestTerminationCode toe) {
+
+    TCT_CONNECTION_INFO* con_info = *con_cls;
+
+    tct_connection_info_clear(con_info);
+    free(con_info);
+
+    *con_cls = NULL;
+}
+
+//example
+size_t tct_mhd_process_get_example(TCT_CONNECTION_INFO* info) {
+    int status_code = MHD_HTTP_OK;
+
+    //process header
+
+    //process body
+    json_object *root = json_object_new_object();
+    json_object_object_add(root, "name", json_object_new_string("PARK"));
+    json_object_object_add(root, "phone", json_object_new_string("010000100"));
+    json_object_object_add(root, "num", json_object_new_int(3));
+
+    tct_mhd_make_body(info->res, root);
+
+    //unref json object
+    json_object_put(root);
+
+    return status_code;
+}
+
+size_t tct_mhd_process_post_example(TCT_CONNECTION_INFO* info) {
+    int status_code = MHD_HTTP_OK;
+
+    //process header
+    TCT_HTTP_HEADER* header = tct_http_header_new();
+    tct_http_header_init(header);
+    tct_http_header_set_name(header, "TEST");
+    tct_http_header_set_value(header, "TEST");
+    tct_ptr_ary_add(info->res->headers, header);
+
+    //process body
+    json_object *root = json_object_new_object();
+    json_object_object_add(root, "name", json_object_new_string("PARK"));
+    json_object_object_add(root, "phone", json_object_new_string("010000100"));
+    json_object_object_add(root, "num", json_object_new_int(3));
+
+    tct_mhd_make_body(info->res, root);
+
+    //unref json object
+    json_object_put(root);
+
+    return status_code;
+}
+
+void tct_mhd_example(void) {
+   TCT_MHD_DATA* data = tct_mhd_data_new();
+    tct_mhd_data_init(data, tct_mhd_process_get_example, tct_mhd_process_post_example);
+    char* header_host = (char*)malloc(5);
+    memset(header_host, 0x00, 5);
+    strcpy(header_host, "Host");
+    tct_ptr_ary_add(data->check_header_list, header_host);
+
+    struct MHD_Daemon *daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION,
+        8080,
+        NULL, //MHD_AcceptPolicyCallback apc
+        NULL, //extra argument to apc /callback to call to check which clients will be allowed to connect; you can pass NULL in which case connections from any IP will be accepted
+        &tct_mhd_access_handler_cb, //MHD_AccessHandlerCallback dh /  default handler for all URIs
+        data, //extra argument to dh
+        MHD_OPTION_NOTIFY_COMPLETED,
+        tct_mhd_complated,
+        NULL,
+        MHD_OPTION_END);
+    if (daemon == NULL) {
+        fprintf(stderr, "MHD_start_daemon() error\n");
+        //return EXIT_FAILURE;
+    }
+    while (true) {
+        getc(stdin);
+    }
+
+    // HTTP 데몬을 종료한다
+    MHD_stop_daemon(daemon);
+
+    tct_mhd_data_free(data);
+}
+//================================================

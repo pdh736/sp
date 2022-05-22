@@ -2,7 +2,6 @@
 #define __TCT_LIBRARY__
 
 #include <pthread.h>
-
 #include <glib.h>
 
 #define TCT_DATE_SIZE       16
@@ -10,6 +9,8 @@
 
 #define TCT_PATH_LEN        256
 #define TCT_NAME_LEN        64
+
+#define TCT_URL_LEN         128
 
 enum TCT_FILE_TYPE {
     TCT_FILE_TYPE_DIR = 0,
@@ -214,6 +215,7 @@ GArray* tct_get_file_content_ary(char *path);
 #define tct_ptr_ary_new2()          g_ptr_array_new_with_free_func(free_ptr_ary_item)
 //param x : GPtrArray*
 #define tct_ptr_ary_len(x)          x->len
+#define tct_ptr_ary_set_free_func(x,f) g_ptr_array_set_free_func(x, f)
 //param x : GPtrArray* / i : index
 //return type is void*
 #define tct_ptr_ary_index(x, i)     g_ptr_array_index(x, i)
@@ -283,13 +285,11 @@ void  tct_parse_json_example(char* json_str);
 //================================================
 
 
-#include <curl/curl.h>
-//=====http client(curl)==========================
-//for curl
-struct memory {
-    char *response;
-    size_t size;
-};
+//=====http common================================
+typedef struct _TCT_HTTP_HEADER {
+    char* name;
+    char* value;
+}TCT_HTTP_HEADER;
 
 typedef struct _TCT_HTTP_DATA {
     GPtrArray* headers;
@@ -297,9 +297,24 @@ typedef struct _TCT_HTTP_DATA {
     int body_size;
 }TCT_HTTP_DATA;
 
+TCT_HTTP_HEADER* tct_http_header_new(void);
+void    tct_http_header_init(TCT_HTTP_HEADER* header);
+void    tct_http_header_free(void* param);
+int     tct_http_header_set_name(TCT_HTTP_HEADER* header, char* name);
+int     tct_http_header_set_value(TCT_HTTP_HEADER* header, char* value);
 
+
+TCT_HTTP_DATA* tct_http_data_new(void);
 void    tct_http_data_init(TCT_HTTP_DATA* data);
-void    tct_http_data_clear(TCT_HTTP_DATA* data);  
+void    tct_http_data_clear(TCT_HTTP_DATA* data);
+void    tct_http_data_free(TCT_HTTP_DATA* data);
+//================================================
+
+
+#include <curl/curl.h>
+//=====http client(curl)==========================
+//for curl
+
 size_t  tct_curl_cb(void *data, size_t size, size_t nmemb, void *userp);
 size_t  tct_curl_header_cb(void *data, size_t size, size_t nitems, void *userp);
 
@@ -317,6 +332,52 @@ int tct_curl_http_post(char* url, TCT_HTTP_DATA* req, TCT_HTTP_DATA* res);
 void tct_curl_example(void);
 
 //================================================
+
+
+#include <microhttpd.h>
+//=====http server================================
+typedef struct _TCT_CONNECTION_INFO {
+    TCT_HTTP_DATA* req;
+    TCT_HTTP_DATA* res;
+    char url[TCT_URL_LEN];
+}TCT_CONNECTION_INFO;
+
+typedef size_t (*TCT_MHD_PROCESS)(TCT_CONNECTION_INFO* info);
+
+typedef struct _TCT_MHD_DATA {
+    TCT_MHD_PROCESS process_get;
+    TCT_MHD_PROCESS process_post;
+    GPtrArray* check_header_list;
+}TCT_MHD_DATA;
+
+TCT_MHD_DATA* tct_mhd_data_new(void);
+void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post);
+void tct_mhd_data_free(TCT_MHD_DATA* data);
+void tct_connection_info_init(TCT_CONNECTION_INFO* info);
+void tct_connection_info_clear(TCT_CONNECTION_INFO* info);
+void tct_connection_info_free(TCT_CONNECTION_INFO* info);
+
+//about request
+int tct_mhd_get_http_header(struct MHD_Connection* connection, TCT_HTTP_DATA* data, GPtrArray* check_list);
+size_t tct_mhd_get_req_body(TCT_CONNECTION_INFO *con_info, const char* upload_data, size_t upload_data_size);
+
+//about response 
+int tct_mhd_make_body(TCT_HTTP_DATA* data, json_object* json);
+enum MHD_Result tct_mhd_response(struct MHD_Connection *connection, TCT_HTTP_DATA *res, int status_code);
+
+//mhd about callback
+enum MHD_Result tct_mhd_access_handler_cb(void* cls, struct MHD_Connection* connection,
+    const char* url, const char* method, const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls);
+
+void tct_mhd_complated(void* cls, struct MHD_Connection* connection, void** con_cls, enum MHD_RequestTerminationCode toe);
+
+
+//example
+size_t tct_mhd_process_get_example(TCT_CONNECTION_INFO* info);
+size_t tct_mhd_process_post_example(TCT_CONNECTION_INFO* info);
+void tct_mhd_example(void);
+//================================================
+
 
 
 #endif
