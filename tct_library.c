@@ -448,7 +448,7 @@ void print_file_content(GPtrArray *file_contents, int i) {
 }
 
 GPtrArray* tct_get_file_list_ptr_ary(char *path) {
-    GPtrArray* file_list = tct_ptr_ary_new();
+    GPtrArray* file_list = tct_ptr_ary_new2();
 
     tct_make_file_list_ptr_ary(file_list, path);
 
@@ -499,6 +499,7 @@ GPtrArray* tct_get_file_content_ptr_ary(char *path) {
         return NULL;
 
     GPtrArray* file_contents = tct_ptr_ary_new();
+    tct_ptr_ary_set_free_func(file_contents, tct_file_content_free);
 
     //구분문자 #
     while(1) {
@@ -516,6 +517,11 @@ GPtrArray* tct_get_file_content_ptr_ary(char *path) {
     fclose(fd);
 
     return file_contents;
+}
+
+void tct_file_content_free(void* item) {
+    TCT_FILE_CONTENT* fc = (TCT_FILE_CONTENT*)item;
+    free(fc);
 }
 //================================================
 
@@ -1027,7 +1033,7 @@ int tct_mhd_get_http_header(struct MHD_Connection* connection, TCT_HTTP_DATA* da
         if (header_val) {
             TCT_HTTP_HEADER* header = tct_http_header_new();
             tct_http_header_set_name(header, header_name);
-            tct_http_header_set_value(header, header_val);
+            tct_http_header_set_value(header, (char*)header_val);
 
             //printf("[header] %s:%s\n", header->name, header->value);
 

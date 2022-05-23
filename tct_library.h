@@ -48,7 +48,6 @@ typedef struct _TCT_SOCK_PKT {
 }TCT_SOCK_PKT;
 
 
-
 /** string token
  * @param str_list save parsed string
  * @param original_str target string
@@ -243,6 +242,7 @@ GPtrArray* tct_get_file_list_ptr_ary(char *path);
 int tct_make_file_list_ptr_ary(GPtrArray* file_list, char *path);
 
 GPtrArray* tct_get_file_content_ptr_ary(char *path);
+void tct_file_content_free(void* item);
 //================================================
 
 
