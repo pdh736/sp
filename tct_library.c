@@ -538,49 +538,25 @@ GQueue* tct_queue_new(void) {
     return q;
 }
 
-void tct_queue_free(GQueue* q, int is_item_dynamic) {
-    if (is_item_dynamic) {
-        g_queue_free_full(q, tct_queue_item_free);
+void tct_queue_free(GQueue* q, void (*free_func)(void*)) {
+    if (free_func) {
+        g_queue_free_full(q, free_func);
     }
     else {
         g_queue_free(q);
     }
 }
 
-void tct_queue_clear(GQueue* q, int is_item_dynamic) {
-    if (!is_item_dynamic) {
+void tct_queue_clear(GQueue* q, void (*free_func)(void*)) {
+    if (!free_func) {
         g_queue_clear(q);
     }
     else {
         while(q->length) {
             gpointer data = g_queue_pop_head(q);
-            free(data);
+            free_func(data);
         }
     }
-}
-
-void tct_queue_push(GQueue* q, gpointer data) {
-    g_queue_push_tail(q, data);
-}
-
-void tct_queue_push_head(GQueue* q, gpointer data) {
-    g_queue_push_head(q, data);
-}
-
-gpointer tct_queue_pop(GQueue* q) {
-    return g_queue_pop_head(q);
-}
-
-gpointer tct_queue_pop_tail(GQueue* q) {
-    return g_queue_pop_tail(q);
-}
-
-gpointer tct_queue_peek(GQueue* q) {
-    return g_queue_peek_head(q);
-}
-
-gpointer tct_queue_peek_tail(GQueue* q) {
-    return g_queue_peek_tail(q);
 }
 
 void tct_queue_sort(GQueue* q, GCompareDataFunc func) {
@@ -980,10 +956,11 @@ TCT_MHD_DATA* tct_mhd_data_new(void) {
     return data;
 }
 
-void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post) {
+void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post, void* arg) {
     data->process_get = process_get;
     data->process_post = process_post;
     data->check_header_list = tct_ptr_ary_new2();
+    data->arg = arg;
 }
 
 void tct_mhd_data_free(TCT_MHD_DATA* data) {
@@ -1222,8 +1199,8 @@ size_t tct_mhd_process_post_example(TCT_CONNECTION_INFO* info) {
 }
 
 void tct_mhd_example(void) {
-   TCT_MHD_DATA* data = tct_mhd_data_new();
-    tct_mhd_data_init(data, tct_mhd_process_get_example, tct_mhd_process_post_example);
+    TCT_MHD_DATA* data = tct_mhd_data_new();
+    tct_mhd_data_init(data, tct_mhd_process_get_example, tct_mhd_process_post_example, NULL);
     char* header_host = (char*)malloc(5);
     memset(header_host, 0x00, 5);
     strcpy(header_host, "Host");

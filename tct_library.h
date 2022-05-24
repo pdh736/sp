@@ -255,19 +255,21 @@ GQueue* tct_queue_new(void);
  * @param q target queue
  * @param is_item_dynamic when item dynamic allocated :1, static alllocated : 0
 */
-void tct_queue_free(GQueue* q, int is_item_dynamic);
-void tct_queue_clear(GQueue* q, int is_item_dynamic);
+void tct_queue_free(GQueue* q, void (*free_func)(void*));
+void tct_queue_clear(GQueue* q, void (*free_func)(void*));
 
 
 //param x : GQueue*
-#define tct_queue_len(q)    q->length()
+#define tct_queue_len(q)    q->length
 
-void tct_queue_push(GQueue* q, gpointer data);
-void tct_queue_push_head(GQueue* q, gpointer data);
-gpointer tct_queue_pop(GQueue* q);
-gpointer tct_queue_pop_tail(GQueue* q);
-gpointer tct_queue_peek(GQueue* q);
-gpointer tct_queue_peek_tail(GQueue* q);
+#define tct_queue_push(q, data)         g_queue_push_tail(q, data)
+#define tct_queue_push_head(q, data)    g_queue_push_head(q, data)
+#define tct_queue_pop(q)                g_queue_pop_head(q)
+#define tct_queue_pop_nth(q, n)         g_queue_pop_nth(q, n)
+#define tct_queue_pop_tail(q)           g_queue_pop_tail(q)
+#define tct_queue_peek(q)               g_queue_peek_head(q)
+#define tct_queue_peek_nth(q, n)        g_queue_peek_nth(q)
+#define tct_queue_peek_tail(q)          g_queue_peek_tail(q)
 
 void tct_queue_sort(GQueue* q, GCompareDataFunc func);
 //================================================
@@ -348,10 +350,11 @@ typedef struct _TCT_MHD_DATA {
     TCT_MHD_PROCESS process_get;
     TCT_MHD_PROCESS process_post;
     GPtrArray* check_header_list;
+    void* arg;
 }TCT_MHD_DATA;
 
 TCT_MHD_DATA* tct_mhd_data_new(void);
-void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post);
+void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post, void* arg);
 void tct_mhd_data_free(TCT_MHD_DATA* data);
 void tct_connection_info_init(TCT_CONNECTION_INFO* info);
 void tct_connection_info_clear(TCT_CONNECTION_INFO* info);
