@@ -209,23 +209,25 @@ GArray* tct_get_file_content_ary(char *path);
 
 // use when need dynamic alloc example string, pointer member
 //=====GPtrArray wrapper==========================
-#define tct_ptr_ary_new()           g_ptr_array_new()
+#define tct_ptr_ary_new()               g_ptr_array_new()
 //g_ptr_array_new + g_ptr_array_set_free_func
-#define tct_ptr_ary_new2()          g_ptr_array_new_with_free_func(free_ptr_ary_item)
+#define tct_ptr_ary_new2(f)             g_ptr_array_new_with_free_func(f)
+//g_ptr_array_new + g_ptr_array_set_free_func
+#define tct_ptr_ary_new3()              g_ptr_array_new_with_free_func(free_ptr_ary_item)
 //param x : GPtrArray*
-#define tct_ptr_ary_len(x)          x->len
-#define tct_ptr_ary_set_free_func(x,f) g_ptr_array_set_free_func(x, f)
+#define tct_ptr_ary_len(x)              x->len
+#define tct_ptr_ary_set_free_func(x,f)  g_ptr_array_set_free_func(x, f)
 //param x : GPtrArray* / i : index
 //return type is void*
-#define tct_ptr_ary_index(x, i)     g_ptr_array_index(x, i)
+#define tct_ptr_ary_index(x, i)         g_ptr_array_index(x, i)
 //param x : GPtrArray*              // gptrarray, free(If TRUE the actual element data is freed as well)
-#define tct_ptr_ary_free(x)         g_ptr_array_free(x, TRUE)
+#define tct_ptr_ary_free(x)             g_ptr_array_free(x, TRUE)
 //param x : GPtrArray* / d : data  // gptrarray, data
-#define tct_ptr_ary_add(x, d)       g_ptr_array_add(x, d)
+#define tct_ptr_ary_add(x, d)           g_ptr_array_add(x, d)
 //param x : GPtrArray* / i : index
-#define tct_ptr_ary_del(x, i)    g_ptr_array_remove(x, i)
+#define tct_ptr_ary_del(x, i)           g_ptr_array_remove(x, i)
 //param x : GPtrArray* / f : compare func
-#define tct_ptr_ary_sort(x, f)      g_ptr_array_sort(x, (GCompareFunc)f)
+#define tct_ptr_ary_sort(x, f)          g_ptr_array_sort(x, (GCompareFunc)f)
 
 void free_ptr_ary_item(gpointer data);
 
@@ -277,13 +279,9 @@ void tct_queue_sort(GQueue* q, GCompareDataFunc func);
 
 #include <json-c/json.h>
 //=====json=======================================
-/**
- * @param file_path read file path.
- * @return string in JSON format that contain hole file, must free return val.
-*/
-char* tct_file_to_json_example(char *file_path);
-char* tct_make_json_example(void);
-void  tct_parse_json_example(char* json_str);
+void tct_file_to_json_example(char *file_path);
+void tct_json_to_file_example(char *file_path);
+void tct_json_iter_example(char* file_path);
 //================================================
 
 

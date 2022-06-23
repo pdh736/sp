@@ -566,96 +566,78 @@ void tct_queue_sort(GQueue* q, GCompareDataFunc func) {
 
 
 //=====json=======================================
-char* tct_file_to_json_example(char *file_path) {
-    struct stat file_info;
-    FILE *fd;
-        
-    fd = fopen(file_path, "rb");
-    if(!fd) {
-        printf("file open error\n");
-        return NULL;
-    }
+void tct_file_to_json_example(char *file_path) {
+    json_object* obj = json_object_from_file(file_path);
 
-    stat(file_path, &file_info);
-    //printf("file path : %s / file size : %d\n", file_path, file_info.st_size);
-    int buf_size = file_info.st_size;
-    char *buf = (char*)malloc(sizeof(char)*buf_size);
-    
-    fread(buf, 1, buf_size, fd);
-    
-    fclose(fd);
+    json_object* name = NULL;
+    json_object* number = NULL;
 
-    json_object *myobj = json_object_new_object();
-    json_object_object_add(myobj, "FilePath", json_object_new_string(file_path));
-    json_object_object_add(myobj, "FileContent", json_object_new_string(buf));
+    json_object_object_get_ex(obj, "name", &name);
+    json_object_object_get_ex(obj, "number", &number);
 
-    free(buf);
+    printf("name : %s, number : %d\n", json_object_get_string(name), json_object_get_int(number));
 
-    const char *result_json = json_object_to_json_string_ext(myobj, JSON_C_TO_STRING_PLAIN);
-
-    int len = strlen(result_json);
-    char *result_str = (char*)malloc(sizeof(char)*(len+1));
-    strncpy(result_str, result_json, len);
-    result_str[len] = 0;
-
-    json_object_put(myobj);
-
-    return result_str;
+    json_object_put(obj);
 }
 
-char* tct_make_json_example()
-{
-    json_object *myobj = json_object_new_object();
-    json_object_object_add(myobj, "name", json_object_new_string("spiderman"));
-    json_object_object_add(myobj, "age", json_object_new_int(45));
-    json_object_object_add(myobj, "married", json_object_new_boolean(1));
+void tct_json_to_file_example(char *file_path) {
+    json_object* obj = json_object_new_object();
+	
+	json_object_object_add(obj, "name", json_object_new_string("park"));
+	json_object_object_add(obj, "age", json_object_new_int(40));
+	json_object_object_add(obj, "married", json_object_new_boolean(0)); 
 
-    json_object *specialty = json_object_new_array();
-    json_object_array_add(specialty, json_object_new_string("martial art"));
-    json_object_array_add(specialty, json_object_new_string("gun"));
-    json_object_object_add(myobj, "specialty", specialty);
+	json_object* arr = json_object_new_array();
+	json_object_array_add(arr, json_object_new_string("c"));
+	json_object_array_add(arr, json_object_new_string("python"));
+	json_object_object_add(obj, "skill", arr);
 
-    json_object *vaccine = json_object_new_object();
-    json_object_object_add(vaccine, "1st", json_object_new_string("done"));
-    json_object_object_add(vaccine, "2nd", json_object_new_string("expected"));
-    json_object_object_add(vaccine, "3rd", json_object_new_null());
-    json_object_object_add(myobj, "vaccine", vaccine);
+	json_object* addr = json_object_new_object();
+	json_object_object_add(addr, "contry", json_object_new_string("korea"));
+	json_object_object_add(addr, "city", json_object_new_string("seoul"));
+	json_object_object_add(obj, "address", addr);
 
-    json_object *children = json_object_new_array();
-    json_object *child1 = json_object_new_object();
-    json_object_object_add(child1, "name", json_object_new_string("spiderboy"));
-    json_object_object_add(child1, "age", json_object_new_int(10));
-    json_object *child2 = json_object_new_object();
-    json_object_object_add(child2, "name", json_object_new_string("spidergirl"));
-    json_object_object_add(child2, "age", json_object_new_int(8));
-    json_object_array_add(children, child1);
-    json_object_array_add(children, child2);
-    json_object_object_add(myobj, "children", children);
+	json_object_object_add(obj, "child", json_type_null);
 
-    json_object_object_add(myobj, "address", json_object_new_null());
+	json_object* item_arr = json_object_new_array();
+	
+	json_object* item1 = json_object_new_object();
+	json_object_object_add(item1, "name", json_object_new_string("keybord"));
+	json_object_object_add(item1, "price", json_object_new_int(10000));
+	json_object_array_add(item_arr, item1);
+	
+	json_object* item2 = json_object_new_object();
+	json_object_object_add(item2, "name", json_object_new_string("mouse"));
+	json_object_object_add(item2, "price", json_object_new_int(20000));
+	json_object_array_add(item_arr, item2);
 
-    const char *result_json = json_object_to_json_string_ext(myobj, JSON_C_TO_STRING_PLAIN);
-    //printf("json: %s\n", result_json);
-    //json_object_to_file("sample.json", myobj);
+	json_object_object_add(obj, "item", item_arr);
 
-    int len = strlen(result_json);
-    char *result_str = (char*)malloc(sizeof(char)*(len+1));
-    strncpy(result_str, result_json, len);
-    result_str[len] = 0;
+    json_object_to_file(file_path, obj);
 
-    json_object_put(myobj);
+    //const char *result_json = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+	//printf("%s\n", result_json);
 
-    return result_str;
+    json_object_put(obj);
 }
 
-void tct_parse_json_example(char* json_str) {
-    json_object *root, *name, *phone;
-    root = json_tokener_parse(json_str);
-    json_object_object_get_ex(root, "name", &name);
-    json_object_object_get_ex(root, "phone", &phone);
-    printf("name: %s, phone: %s\n", json_object_get_string(name), json_object_get_string(phone));
+void tct_json_iter_example(char* file_path) {
+	json_object *myObj = json_object_from_file(file_path);
 
-    json_object_put(root);
+	struct json_object_iterator it;
+	struct json_object_iterator itEnd;
+
+	it = json_object_iter_begin(myObj);
+	itEnd = json_object_iter_end(myObj);
+
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char * key = json_object_iter_peek_name(&it);
+		json_object *value = json_object_iter_peek_value(&it);
+		json_type jt = json_object_get_type(value);
+		const char * tn = json_type_to_name(jt);
+		printf("Key : %s / Value Type : %s\n", key, tn);
+		json_object_iter_next(&it);
+	}
 }
 //================================================
 
