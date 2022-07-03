@@ -184,7 +184,7 @@ void tct_thread_join(TCT_THREAD_INFO *t_info) {
 
 
 //=====socket====================================
-int tct_init_server_sock(int port) {
+int tct_sock_init_server(int port) {
     int server_sock;
     struct sockaddr_in server_addr;
 
@@ -206,7 +206,7 @@ int tct_init_server_sock(int port) {
     return server_sock;
 }
 
-int tct_accept_server_sock(int server_sock) {
+int tct_sock_accept(int server_sock) {
     int client_sock;
     struct sockaddr_in client_addr;
     unsigned int len;
@@ -217,7 +217,7 @@ int tct_accept_server_sock(int server_sock) {
     return client_sock;
 }
 
-int tct_connect_client_sock(char *server_ip, int server_port) {
+int tct_sock_connect(char* server_ip, int server_port) {
     int client_sock;
     struct sockaddr_in client_addr;
 
@@ -233,11 +233,12 @@ int tct_connect_client_sock(char *server_ip, int server_port) {
     return client_sock;
 }
 
-void tct_close_sock(int sock) {
-    close(sock);
+void tct_sock_close(int sock) {
+    if (sock)
+        close(sock);
 }
 
-TCT_SOCK_PKT * tct_alloc_packet(void) {
+TCT_SOCK_PKT * tct_sock_alloc_packet(void) {
     TCT_SOCK_PKT *pkt = (TCT_SOCK_PKT*)malloc(sizeof(TCT_SOCK_PKT));
     pkt->hdr.data_size = 0;
     pkt->data = NULL;
@@ -245,7 +246,7 @@ TCT_SOCK_PKT * tct_alloc_packet(void) {
     return pkt;
 }
 
-void tct_free_packet(TCT_SOCK_PKT *pkt) {
+void tct_sock_free_packet(TCT_SOCK_PKT* pkt) {
     if(pkt->data) {
         free(pkt->data);
         pkt->data = NULL;
@@ -257,7 +258,7 @@ void tct_free_packet(TCT_SOCK_PKT *pkt) {
     }
 }
 
-void tct_make_packet(TCT_SOCK_PKT *pkt, int size, char *data) {
+void tct_sock_make_packet(TCT_SOCK_PKT *pkt, int size, char *data) {
     pkt->hdr.data_size = size;
     pkt->data = (char*)malloc(sizeof(char)*size);
     strncpy(pkt->data, data, size);
@@ -331,30 +332,30 @@ int tct_mkdir(char *path) {
 //=====GArray Example=============================
 //compare func example
 //a-b 오름차순 b-a 내림차순
-int tct_comp_ary_name(gpointer a, gpointer b) {
+int tct_ary_comp_name(gpointer a, gpointer b) {
     return strcmp( ((TCT_FILE_INFO*)a)->name, ((TCT_FILE_INFO*)b)->name);
 }
-int tct_comp_ary_name_desc(gpointer a, gpointer b) {
+int tct_ary_comp_name_desc(gpointer a, gpointer b) {
     return strcmp( ((TCT_FILE_INFO*)b)->name, ((TCT_FILE_INFO*)a)->name);
 }
 
-void tct_print_ary(GArray *array) {
+void tct_ary_print(GArray* array) {
     int i;
     for(i=0;i<array->len;i++) {
         TCT_FILE_INFO file_info = tct_ary_index(array, TCT_FILE_INFO, i);
-        printf("file name : %s\n", file_info.name);
+        printf("file path : %s\n", file_info.path);
     }
 }
 
-GArray* tct_get_file_list_ary(char *path) {
+GArray* tct_ary_get_file_list(char* path) {
     GArray* file_list = tct_ary_new(TCT_FILE_INFO);
 
-    tct_make_file_list_ary(file_list, path);
+    tct_ary_make_file_list(file_list, path);
 
     return file_list;
 }
 
-int tct_make_file_list_ary(GArray* file_list, char *path) {
+int tct_ary_make_file_list(GArray* file_list, char* path) {
     struct dirent *de;
     struct stat file_stat;
     
@@ -372,13 +373,16 @@ int tct_make_file_list_ary(GArray* file_list, char *path) {
         memset(&file_info, 0, sizeof(file_info));
 
         strncpy(file_info.name, de->d_name, sizeof(file_info.name)-1);
-        sprintf(file_info.path, "%s/%s", path, de->d_name);
+        if (path[strlen(path)-1] == '/')
+            sprintf(file_info.path, "%s%s", path, de->d_name);
+        else
+            sprintf(file_info.path, "%s/%s", path, de->d_name);
 
         stat(file_info.path, &file_stat);
         file_info.size = file_stat.st_size;
         if(S_ISDIR(file_stat.st_mode)) {//디렉토리
             file_info.type = TCT_FILE_TYPE_DIR;
-            tct_make_file_list_ary(file_list, file_info.path);
+            tct_ary_make_file_list(file_list, file_info.path);
         }
         else {
             file_info.type = TCT_FILE_TYPE_FILE;
@@ -391,22 +395,53 @@ int tct_make_file_list_ary(GArray* file_list, char *path) {
     return 0;
 }
 
-GArray* tct_get_file_content_ary(char *path) {
-    FILE *fd = fopen(path, "rb");
+GArray* tct_ary_get_file_content(char* path) {
+    FILE* fd = fopen(path, "rb");
     if(fd < 0)
         return NULL;
 
     GArray* file_contents = tct_ary_new(TCT_FILE_CONTENT);
 
     TCT_FILE_CONTENT fc;
-    //구분문자 #
-    while(fscanf(fd, "%d#%[^#]#%d", &fc.num, fc.name, &fc.val) > 0 ) {
+    //win
+    //while(fscanf(fd, "%d#%[^#]#%d%*c%*c", &fc.num, fc.name, &fc.val) > 0 ) {
+    while(fscanf(fd, "%d#%[^#]#%d%*c", &fc.num, fc.name, &fc.val) > 0 ) {
         tct_ary_add(file_contents, &fc);
     }
 
     fclose(fd);
 
     return file_contents;
+}
+
+GArray* tct_ary_get_file_content2(char* path, int (*cb)(GArray*, FILE*)) {
+    FILE* fd = fopen(path, "rb");
+    if(fd < 0)
+        return NULL;
+
+    GArray* file_contents = tct_ary_new(TCT_FILE_CONTENT);
+
+    while(1) {
+        if (cb(file_contents, fd) <= 0)
+            break;
+    }
+
+    fclose(fd);
+
+    return file_contents;
+}
+
+int tct_ary_get_file_content_cb(GArray* file_contents, FILE* fd) {
+
+    TCT_FILE_CONTENT fc;
+    memset(&fc, 0x00, sizeof(fc));
+    //win
+    //int ret = fscanf(fd, "%d#%[^#]#%d%*c%*c", &fc.num, fc.name, &fc.val);
+    int ret = fscanf(fd, "%d#%[^#]#%d%*c", &fc.num, fc.name, &fc.val);
+    if (ret > 0)
+        tct_ary_add(file_contents, &fc);
+
+    return ret;
 }
 //================================================
 
@@ -419,15 +454,15 @@ void free_ptr_ary_item(gpointer data) {
 //=====GPtrArray Example==========================
 //compare func example
 //a-b 오름차순 b-a 내림차순
-int tct_comp_ptr_ary_name(gpointer a, gpointer b) {
+int tct_ptr_ary_comp_name(gpointer a, gpointer b) {
     return strcmp( (*(TCT_FILE_INFO**)a)->name, (*(TCT_FILE_INFO**)b)->name);
 }
 
-int tct_comp_ptr_ary_name_desc(gpointer a, gpointer b) {
+int tct_ptr_ary_comp_name_desc(gpointer a, gpointer b) {
     return strcmp( (*(TCT_FILE_INFO**)b)->name, (*(TCT_FILE_INFO**)a)->name);
 }
 
-void tct_print_ptr_ary(GPtrArray *array) {
+void tct_ptr_ary_print(GPtrArray *array) {
     int i;
     for(i=0;i<array->len;i++) {
         TCT_FILE_INFO *file_info = tct_ptr_ary_index(array, i);
@@ -435,27 +470,28 @@ void tct_print_ptr_ary(GPtrArray *array) {
     }
 }
 
-void tct_print_ptr_ary_cb(GPtrArray *array, void (*cb)(GPtrArray *, int)) {
+void tct_ptr_ary_print2(GPtrArray *array, void (*cb)(void*)) {
     int i;
     for(i=0;i<array->len;i++) {
-        cb(array, i);
+        cb(tct_ptr_ary_index(array, i));
     }
 }
 
-void print_file_content(GPtrArray *file_contents, int i) {
-    TCT_FILE_CONTENT *file_content = tct_ptr_ary_index(file_contents, i);
-    printf("%s\n", file_content->name);
+void tct_ptr_ary_print_cb(void* item) {
+    TCT_FILE_CONTENT* fc = (TCT_FILE_CONTENT*)item;
+    printf("%d#%s%d\n", fc->num, fc->name, fc->val);
+    
 }
 
-GPtrArray* tct_get_file_list_ptr_ary(char *path) {
+GPtrArray* tct_ptr_ary_get_file_list(char *path) {
     GPtrArray* file_list = tct_ptr_ary_new2();
 
-    tct_make_file_list_ptr_ary(file_list, path);
+    tct_ptr_ary_make_file_list(file_list, path);
 
     return file_list;
 
 }
-int tct_make_file_list_ptr_ary(GPtrArray* file_list, char *path) {
+int tct_ptr_ary_make_file_list(GPtrArray* file_list, char *path) {
     struct dirent *de;
     struct stat file_stat;
     
@@ -480,7 +516,7 @@ int tct_make_file_list_ptr_ary(GPtrArray* file_list, char *path) {
 
         if(S_ISDIR(file_stat.st_mode)) {//디렉토리
             file_info->type = TCT_FILE_TYPE_DIR;
-            tct_make_file_list_ptr_ary(file_list, file_info->path);
+            tct_ptr_ary_make_file_list(file_list, file_info->path);
         }
         else {
             file_info->type = TCT_FILE_TYPE_FILE;
@@ -493,20 +529,23 @@ int tct_make_file_list_ptr_ary(GPtrArray* file_list, char *path) {
     return 0;
 }
 
-GPtrArray* tct_get_file_content_ptr_ary(char *path) {
+GPtrArray* tct_ptr_ary_get_file_content(char *path) {
     FILE *fd = fopen(path, "rb");
-    if(fd < 0)
+    if(fd <= 0) {
+        printf("file open error\n");
         return NULL;
+    }
 
     GPtrArray* file_contents = tct_ptr_ary_new();
     tct_ptr_ary_set_free_func(file_contents, tct_file_content_free);
 
-    //구분문자 #
     while(1) {
         TCT_FILE_CONTENT *fc = (TCT_FILE_CONTENT*)g_malloc(sizeof(TCT_FILE_CONTENT));
         memset(fc, 0, sizeof(TCT_FILE_CONTENT));
 
-        if(fscanf(fd, "%d#%[^#]#%d", &fc->num, fc->name, &fc->val) <= 0) {
+        //win
+        //if(fscanf(fd, "%d#%[^#]#%d%*c%*c", &fc->num, fc->name, &fc->val) <= 0) {
+        if(fscanf(fd, "%d#%[^#]#%d%*c", &fc->num, fc->name, &fc->val) <= 0) {
             g_free(fc);
             break;
         }
@@ -519,9 +558,46 @@ GPtrArray* tct_get_file_content_ptr_ary(char *path) {
     return file_contents;
 }
 
+GPtrArray* tct_ptr_ary_get_file_content2(char *path, int (*cb)(GPtrArray*, FILE*) ) {
+    FILE *fd = fopen(path, "rb");
+    if(fd <= 0) {
+        printf("file open error\n");
+        return NULL;
+    }
+
+    GPtrArray* file_contents = tct_ptr_ary_new();
+    tct_ptr_ary_set_free_func(file_contents, tct_file_content_free);
+
+    while(1) {
+        if (cb(file_contents, fd) <= 0)
+            break;
+    }
+
+    fclose(fd);
+
+    return file_contents;
+}
+
+int tct_ptr_ary_get_file_content_cb(GPtrArray* file_content, FILE* fd) {
+    TCT_FILE_CONTENT *fc = (TCT_FILE_CONTENT*)g_malloc(sizeof(TCT_FILE_CONTENT));
+    memset(fc, 0, sizeof(TCT_FILE_CONTENT));
+
+    //win
+    //int ret = fscanf(fd, "%d#%[^#]#%d%*c%*c", &fc->num, fc->name, &fc->val);
+    int ret = fscanf(fd, "%d#%[^#]#%d%*c", &fc->num, fc->name, &fc->val);
+    if (ret <= 0)
+        g_free(fc);
+    else
+        tct_ptr_ary_add(file_content, fc);
+
+    return ret;
+}
+
 void tct_file_content_free(void* item) {
-    TCT_FILE_CONTENT* fc = (TCT_FILE_CONTENT*)item;
-    free(fc);
+    if (item) {
+        TCT_FILE_CONTENT* fc = (TCT_FILE_CONTENT*)item;
+        free(fc);
+    }
 }
 //================================================
 
