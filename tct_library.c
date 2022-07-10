@@ -610,7 +610,7 @@ void tct_queue_item_free(gpointer data) {
 
 GQueue* tct_queue_new(void) {
     GQueue* q = g_queue_new();
-    //g_queue_init(q) //when must use static allocation
+    //g_queue_init(q); //when must use static allocation
     return q;
 }
 
@@ -742,7 +742,7 @@ void tct_http_header_free(void* param) {
     }
 }
 
-int tct_http_header_set_name(TCT_HTTP_HEADER* header, char* name) {
+int tct_http_header_set_name(TCT_HTTP_HEADER* header, const char* name) {
     if (!header || !name)
         return -1;
 
@@ -754,7 +754,7 @@ int tct_http_header_set_name(TCT_HTTP_HEADER* header, char* name) {
 
     return name_len;
 }
-int tct_http_header_set_value(TCT_HTTP_HEADER* header, char* value) {
+int tct_http_header_set_value(TCT_HTTP_HEADER* header, const char* value) {
     if (!header || !value)
         return -1;
 
@@ -835,8 +835,8 @@ size_t tct_curl_header_cb(void *data, size_t size, size_t nitems, void *userp) {
     TCT_HTTP_HEADER* header = tct_http_header_new();
     tct_http_header_init(header);
     
-    char name[128] = {0,};
-    char value[265] = {0,};
+    char name[TCT_HEADER_NAME_LEN] = {0,};
+    char value[TCT_HEADER_VAL_LEN] = {0,};
 
     sscanf(data, "%[^: ]:%[^\r/n]", name, value);
     
@@ -849,11 +849,29 @@ size_t tct_curl_header_cb(void *data, size_t size, size_t nitems, void *userp) {
     return len;
 }
 
-struct curl_slist* tct_curl_set_header(CURL* curl, GPtrArray* ptr_ary) {
+struct curl_slist* tct_curl_set_header(CURL* curl, GPtrArray* headers) {
 
     struct curl_slist* header = NULL ;
-    for (int i = 0; i < tct_ptr_ary_len(ptr_ary); i++) {
-        header = curl_slist_append( header, tct_ptr_ary_index(ptr_ary, i));
+    char str_header[TCT_HEADER_STR_LEN] = {0,};
+    for (int i = 0; i < tct_ptr_ary_len(headers); i++) {
+
+        memset(str_header, 0x00, sizeof(str_header));
+
+        TCT_HTTP_HEADER* tmp_header = tct_ptr_ary_index(headers, i);
+        if (strlen(tmp_header->name) < 0) {
+            printf("header name len < 0 \n");
+            continue;
+        }
+        if (strlen(tmp_header->value) < 0) {
+            printf("header value len < 0 \n");
+            continue;
+        }
+
+        strncat(str_header, tmp_header->name, strlen(tmp_header->name));
+        strncat(str_header, ": ", 1);
+        strncat(str_header, tmp_header->value, strlen(tmp_header->value));
+
+        header = curl_slist_append( header, str_header);
     }
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER , header) ;
     return header;
@@ -971,14 +989,18 @@ void tct_curl_example(void) {
 
     TCT_HTTP_HEADER* con_type = tct_http_header_new();
     tct_http_header_init(con_type);
-    tct_http_header_set_name(user, "Content-Type");
-    tct_http_header_set_value(user, "application/x-www-form-urlencoded");
+    tct_http_header_set_name(con_type, "Content-Type");
+    tct_http_header_set_value(con_type, "application/x-www-form-urlencoded");
     tct_ptr_ary_add(req.headers, con_type);
 
     status = tct_curl_http_get(url, &req, &res);
     printf("http status : %d\n", status);
 
     printf("header size : %d\n", tct_ptr_ary_len(res.headers));
+    for(int i = 0; i < tct_ptr_ary_len(res.headers); i++) {
+        TCT_HTTP_HEADER* res_header = tct_ptr_ary_index(res.headers, i);
+        printf("[header] : %s:%s\n", res_header->name, res_header->value);
+    }
     printf("[body] : %s\n", res.body);
 
     tct_http_data_clear(&res);
@@ -1014,17 +1036,17 @@ TCT_MHD_DATA* tct_mhd_data_new(void) {
     return data;
 }
 
-void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post, void* arg) {
+void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post) {
     data->process_get = process_get;
     data->process_post = process_post;
-    data->check_header_list = tct_ptr_ary_new2();
-    data->arg = arg;
+    data->headers = tct_ptr_ary_new();
+    tct_ptr_ary_set_free_func(data->headers, tct_http_header_free);
 }
 
 void tct_mhd_data_free(TCT_MHD_DATA* data) {
     if(data) {
-        tct_ptr_ary_free(data->check_header_list);
-        data->check_header_list = NULL;
+        tct_ptr_ary_free(data->headers);
+        data->headers = NULL;
         free(data);
     }
 }
@@ -1058,25 +1080,40 @@ void tct_connection_info_free(TCT_CONNECTION_INFO* info) {
     }
 }
 
-
 //about request
-int tct_mhd_get_http_header(struct MHD_Connection* connection, TCT_HTTP_DATA* data, GPtrArray* check_list) {
-    int ary_len = tct_ptr_ary_len(check_list);
-    for (int i = 0; i < ary_len; i++) {
-        char* header_name = tct_ptr_ary_index(check_list, i);
-        const char* header_val = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, header_name);
-        if (header_val) {
-            TCT_HTTP_HEADER* header = tct_http_header_new();
-            tct_http_header_set_name(header, header_name);
-            tct_http_header_set_value(header, (char*)header_val);
+int tct_mhd_get_http_header_key(struct MHD_Connection* connection, TCT_HTTP_DATA* data, const char* key) {
+    const char* header_val = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, key);
+    if (header_val) {
+        TCT_HTTP_HEADER* header = tct_http_header_new();
+        tct_http_header_set_name(header, key);
+        tct_http_header_set_value(header, (char*)header_val);
 
-            //printf("[header] %s:%s\n", header->name, header->value);
+        //printf("[header] %s:%s\n", header->name, header->value);
 
-            tct_ptr_ary_add(data->headers, header);
-        }
-
+        tct_ptr_ary_add(data->headers, header);
     }
+
     return tct_ptr_ary_len(data->headers);
+}
+
+//MHD_KeyValueIterator get_header_cb(void *cls, enum MHD_ValueKind kind, const char *key, const char *value, size_t value_size) {
+enum MHD_Result get_header_cb(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+    GPtrArray* headers = (GPtrArray*)cls;
+    TCT_HTTP_HEADER* header = tct_http_header_new();
+    tct_http_header_set_name(header, key);
+    tct_http_header_set_value(header, value);
+
+    //printf("[header] %s:%s\n", header->name, header->value);
+
+    tct_ptr_ary_add(headers, header);
+
+    return MHD_YES;
+
+}
+int tct_mhd_get_http_header(struct MHD_Connection* connection, TCT_HTTP_DATA* data) {
+    int header_cnt = MHD_get_connection_values(connection, MHD_HEADER_KIND, get_header_cb, data->headers);
+
+    return header_cnt;
 }
 
 size_t tct_mhd_get_req_body(TCT_CONNECTION_INFO *con_info, const char* upload_data, size_t upload_data_size) {
@@ -1159,6 +1196,7 @@ enum MHD_Result tct_mhd_access_handler_cb(void* cls, struct MHD_Connection* conn
     //int status_code = MHD_HTTP_OK; //200 OK
     int status_code = 500; // 500 Internel server error
 
+
     TCT_CONNECTION_INFO* con_info = (TCT_CONNECTION_INFO*)*con_cls;
     // 최초 접속의 경우
     if (con_info == NULL) {
@@ -1168,16 +1206,17 @@ enum MHD_Result tct_mhd_access_handler_cb(void* cls, struct MHD_Connection* conn
         }
 
         tct_connection_info_init(con_info);
-
+        
+        strncpy(con_info->url, url, TCT_URL_LEN-1);
+        
         *con_cls = con_info;
 
         return MHD_YES;
     }
 
     TCT_MHD_DATA* data = (TCT_MHD_DATA*)cls;
-    if (data && data->check_header_list && (tct_ptr_ary_len(con_info->req->headers)>0) == 0) {
-        tct_mhd_get_http_header(connection, con_info->req, data->check_header_list);
-    }
+
+    tct_mhd_get_http_header(connection, con_info->req);
 
     if (strcmp(method, "POST") == 0) {
         if (*upload_data_size != 0) {
@@ -1206,8 +1245,7 @@ void tct_mhd_complated(void* cls, struct MHD_Connection* connection,
 
     TCT_CONNECTION_INFO* con_info = *con_cls;
 
-    tct_connection_info_clear(con_info);
-    free(con_info);
+    tct_connection_info_free(con_info);
 
     *con_cls = NULL;
 }
@@ -1215,8 +1253,12 @@ void tct_mhd_complated(void* cls, struct MHD_Connection* connection,
 //example
 size_t tct_mhd_process_get_example(TCT_CONNECTION_INFO* info) {
     int status_code = MHD_HTTP_OK;
-
     //process header
+    TCT_HTTP_HEADER* header = tct_http_header_new();
+    tct_http_header_init(header);
+    tct_http_header_set_name(header, "TEST");
+    tct_http_header_set_value(header, "TEST");
+    tct_ptr_ary_add(info->res->headers, header);
 
     //process body
     json_object *root = json_object_new_object();
@@ -1258,11 +1300,13 @@ size_t tct_mhd_process_post_example(TCT_CONNECTION_INFO* info) {
 
 void tct_mhd_example(void) {
     TCT_MHD_DATA* data = tct_mhd_data_new();
-    tct_mhd_data_init(data, tct_mhd_process_get_example, tct_mhd_process_post_example, NULL);
-    char* header_host = (char*)malloc(5);
-    memset(header_host, 0x00, 5);
-    strcpy(header_host, "Host");
-    tct_ptr_ary_add(data->check_header_list, header_host);
+    tct_mhd_data_init(data, tct_mhd_process_get_example, tct_mhd_process_post_example);
+    
+    TCT_HTTP_HEADER* header = tct_http_header_new();
+    tct_http_header_init(header);
+    tct_http_header_set_name(header, "User");
+    tct_http_header_set_value(header, "user1");
+    tct_ptr_ary_add(data->headers, header);
 
     struct MHD_Daemon *daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION,
         8080,

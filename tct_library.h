@@ -10,10 +10,15 @@
 #define TCT_DATE_SIZE       16
 #define TCT_DATE_TIME_SIZE  32
 
-#define TCT_PATH_LEN        256
+#define TCT_PATH_LEN        256 
 #define TCT_NAME_LEN        64
 
 #define TCT_URL_LEN         128
+
+#define TCT_HEADER_NAME_LEN 64
+#define TCT_HEADER_VAL_LEN  128
+#define TCT_HEADER_STR_LEN  TCT_HEADER_NAME_LEN + TCT_HEADER_VAL_LEN
+
 
 enum TCT_FILE_TYPE {
     TCT_FILE_TYPE_DIR = 0,
@@ -308,8 +313,8 @@ typedef struct _TCT_HTTP_DATA {
 TCT_HTTP_HEADER* tct_http_header_new(void);
 void    tct_http_header_init(TCT_HTTP_HEADER* header);
 void    tct_http_header_free(void* param);
-int     tct_http_header_set_name(TCT_HTTP_HEADER* header, char* name);
-int     tct_http_header_set_value(TCT_HTTP_HEADER* header, char* value);
+int     tct_http_header_set_name(TCT_HTTP_HEADER* header, const char* name);
+int     tct_http_header_set_value(TCT_HTTP_HEADER* header, const char* value);
 
 
 TCT_HTTP_DATA* tct_http_data_new(void);
@@ -322,10 +327,12 @@ void    tct_http_data_free(TCT_HTTP_DATA* data);
 //=====http client(curl)==========================
 //for curl
 
+//for res
 size_t  tct_curl_cb(void *data, size_t size, size_t nmemb, void *userp);
 size_t  tct_curl_header_cb(void *data, size_t size, size_t nitems, void *userp);
 
-struct curl_slist* tct_curl_set_header(CURL* curl, GPtrArray* ptr_ary);
+//set req header
+struct curl_slist* tct_curl_set_header(CURL* curl, GPtrArray* headers);
 
 /**
  * @param url "http://127.0.0.1:8080/helloworld"
@@ -350,23 +357,25 @@ typedef struct _TCT_CONNECTION_INFO {
 
 typedef size_t (*TCT_MHD_PROCESS)(TCT_CONNECTION_INFO* info);
 
+//pass MHD data 
 typedef struct _TCT_MHD_DATA {
     TCT_MHD_PROCESS process_get;
     TCT_MHD_PROCESS process_post;
-    GPtrArray* check_header_list;
-    void* arg;
+    GPtrArray* headers;
 }TCT_MHD_DATA;
 
 TCT_MHD_DATA* tct_mhd_data_new(void);
-void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post, void* arg);
+void tct_mhd_data_init(TCT_MHD_DATA* data, TCT_MHD_PROCESS process_get, TCT_MHD_PROCESS process_post);
 void tct_mhd_data_free(TCT_MHD_DATA* data);
+
 void tct_connection_info_init(TCT_CONNECTION_INFO* info);
 void tct_connection_info_clear(TCT_CONNECTION_INFO* info);
 void tct_connection_info_free(TCT_CONNECTION_INFO* info);
 
 //about request
-int tct_mhd_get_http_header(struct MHD_Connection* connection, TCT_HTTP_DATA* data, GPtrArray* check_list);
-size_t tct_mhd_get_req_body(TCT_CONNECTION_INFO *con_info, const char* upload_data, size_t upload_data_size);
+int     tct_mhd_get_http_header_key(struct MHD_Connection* connection, TCT_HTTP_DATA* data, const char* key);
+int     tct_mhd_get_http_headers(struct MHD_Connection* connection, TCT_HTTP_DATA* data, GPtrArray* check_list);
+size_t  tct_mhd_get_req_body(TCT_CONNECTION_INFO *con_info, const char* upload_data, size_t upload_data_size);
 
 //about response 
 int tct_mhd_make_body(TCT_HTTP_DATA* data, json_object* json);
