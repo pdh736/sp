@@ -165,7 +165,7 @@ int diff_second(char *str_time1, char *str_time2, int is_delimeter) {
 
 
 //=====thread====================================
-void tct_thread_init(TCT_THREAD_INFO *t_info, void *(*func)(void*), void *arg) {
+void tct_thread_init(TCT_THREAD_INFO *t_info, void* (*func)(void*), void* arg) {
     t_info->func = func;
     t_info->arg = arg;
 
@@ -1128,6 +1128,8 @@ size_t tct_mhd_get_req_body(TCT_CONNECTION_INFO *con_info, const char* upload_da
     req->body_size += (upload_data_size + 1);
     req->body[req->body_size] = 0;
 
+    //printf("%s\n", req->body);
+
     return upload_data_size;
 }
 
@@ -1216,10 +1218,18 @@ enum MHD_Result tct_mhd_access_handler_cb(void* cls, struct MHD_Connection* conn
 
     TCT_MHD_DATA* data = (TCT_MHD_DATA*)cls;
 
+    //get all headers
     tct_mhd_get_http_header(connection, con_info->req);
+
+    //GPtrArray* headers = con_info->req->headers;
+    //for(int i = 0; i < tct_ptr_ary_len(headers); i++) {
+    //    TCT_HTTP_HEADER* header = tct_ptr_ary_index(headers, i);
+    //    printf("[%s] : %s\n", header->name, header->value);
+    //}
 
     if (strcmp(method, "POST") == 0) {
         if (*upload_data_size != 0) {
+            //printf("upload data size : %ld\n", *upload_data_size);
             tct_mhd_get_req_body(con_info, upload_data, *upload_data_size);
             *upload_data_size = 0;
             return MHD_YES;
@@ -1246,8 +1256,7 @@ void tct_mhd_complated(void* cls, struct MHD_Connection* connection,
     TCT_CONNECTION_INFO* con_info = *con_cls;
 
     tct_connection_info_free(con_info);
-
-    *con_cls = NULL;
+*con_cls = NULL;
 }
 
 //example
